@@ -3,13 +3,13 @@
 Summary: Bidirectional data relay between two data channels ('netcat++')
 Name: socat
 Version: 1.7.4.1
-Release: 5%{?dist}.2
+Release: 6%{?dist}
 License: GPLv2
 Url:  http://www.dest-unreach.org/socat/
 Source: http://www.dest-unreach.org/socat/download/%{name}-%{version}.tar.gz
 
 Patch1: socat-1.7.3.3-warn.patch
-# https://issues.redhat.com/browse/RHEL-32914
+# https://issues.redhat.com/browse/RHEL-32438
 # Based on: https://repo.or.cz/socat.git/commit/1477334905be18c08bd6dc77be5a62e36b573de4
 Patch2: socat-1.7.4.1-ipv6-peername-segfault.patch
 
@@ -77,8 +77,8 @@ export OD_C=/usr/bin/od
 %doc %{_mandir}/man1/*
 
 %changelog
-* Thu Apr 18 2024 Martin Osvald <mosvald@redhat.com> - 1.7.4.1-5.2
-- Fix IPv6 peername segfault (RHEL-32914)
+* Mon Apr 15 2024 Martin Osvald <mosvald@redhat.com> - 1.7.4.1-6
+- Fix IPv6 peername segfault (RHEL-32438)
 
 * Tue Aug 10 2021 Mohan Boddu <mboddu@redhat.com> - 1.7.4.1-5
 - Rebuilt for IMA sigs, glibc 2.34, aarch64 flags
