@@ -3,11 +3,13 @@
 Summary: Bidirectional data relay between two data channels ('netcat++')
 Name: socat
 Version: 1.7.4.1
-Release: 1%{?dist}
+Release: 2%{?dist}
 License: GPLv2
 Url:  http://www.dest-unreach.org/socat/
 Source: http://www.dest-unreach.org/socat/download/%{name}-%{version}.tar.gz
 Group: Applications/Internet
+
+Patch1: socat-1.7.4.4-CVE-2024-54661.patch
 
 BuildRequires: openssl-devel readline-devel ncurses-devel
 BuildRequires: autoconf kernel-headers > 2.6.18
@@ -26,6 +28,8 @@ line editor (readline), a program, or a combination of two of these.
 %setup -q
 iconv -f iso8859-1 -t utf-8 CHANGES > CHANGES.utf8
 mv CHANGES.utf8 CHANGES
+
+%autopatch -p1
 
 %build
 %configure  \
@@ -65,6 +69,11 @@ export OD_C=/usr/bin/od
 %doc %{_mandir}/man1/*
 
 %changelog
+* Tue Jun  3 2025 Stepan Broz <sbroz@redhat.com> - 1.7.4.1-2
+- add fix for CVE-2024-54661
+  Resolves: RHEL-70095
+- switch to autopatch, remove unused patches
+
 * Tue Mar 30 2021 Paul Wouters <pwouters@redhat.com> - 1.7.4.1-1
 - Resolves: rhbz#1805132 socat does not recognize IP addresses of the SAN extensions in ssl mode
 - Resolves: rhbz#1870279 Transfer via socat fails with openssl enabled
