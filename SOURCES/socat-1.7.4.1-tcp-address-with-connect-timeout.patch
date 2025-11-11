@@ -1,0 +1,101 @@
+diff --git a/test.sh b/test.sh
+index 99323ad..2869658 100755
+--- a/test.sh
++++ b/test.sh
+@@ -15017,6 +15017,60 @@ PORT=$((PORT+1))
+ N=$((N+1))
+ 
+ 
++
++# Test TCP with options connect-timeout and retry.
++# Up to 1.7.4.3 this terminated immediately on connection refused
++NAME=TCP_TIMEOUT_RETRY
++case "$TESTS" in
++*%$N%*|*%functions%*|*%bugs%*|*%tcp%*|*%socket%*|*%$NAME%*)
++TEST="$NAME: TCP with options connect-timeout and retry"
++# In background run a delayed echo server
++# In foreground start TCP with connect-timeout and retry. On first attempt the
++# server is not listening; when socat makes a second attempt that succeeds, the
++# bug is absent and the test succeeded.
++if ! eval $NUMCOND; then :; else
++tf="$td/test$N.stdout"
++te="$td/test$N.stderr"
++tdiff="$td/test$N.diff"
++da="test$N $(date) $RANDOM"
++CMD0="sleep 1 && $TRACE $SOCAT $opts TCP-L:$PORT,reuseaddr PIPE"
++CMD1="$TRACE $SOCAT $opts - TCP:$LOCALHOST:$PORT,connect-timeout=2,retry=1,interval=2"
++printf "test $F_n $TEST... " $N
++eval "$CMD0" >/dev/null 2>"${te}0" &
++pid0=$!
++echo "$da" |$CMD1 >"${tf}1" 2>"${te}1"
++rc1=$?
++kill $pid0 2>/dev/null; wait
++if [ $rc1 -ne 0 ]; then
++    $PRINTF "$FAILED\n"
++    echo "$CMD0 &" >&2
++    cat "${te}0" >&2
++    echo "$CMD1" >&2
++    cat "${te}1" >&2
++    numFAIL=$((numFAIL+1))
++    listFAIL="$listFAIL $N"
++elif echo "$da" |diff - "${tf}1" >$tdiff; then
++    $PRINTF "$OK\n"
++    if [ "$VERBOSE" ]; then
++	echo "$CMD0 &" >&2
++	echo "$CMD1" >&2
++    fi
++    numOK=$((numOK+1))
++else
++    $PRINTF "$FAILED\n"
++    echo "$CMD0 &" >&2
++    cat "${te}0" >&2
++    echo "$CMD1" >&2
++    cat "${te}1" >&2
++    numFAIL=$((numFAIL+1))
++    listFAIL="$listFAIL $N"
++fi
++fi # NUMCOND
++ ;;
++esac
++PORT=$((PORT+1))
++N=$((N+1))
++
+ # end of common tests
+ 
+ ##################################################################################
+diff --git a/xio-socket.c b/xio-socket.c
+index c1495e8..d6b935c 100644
+--- a/xio-socket.c
++++ b/xio-socket.c
+@@ -859,6 +859,8 @@ int _xioopen_connect(struct single *xfd, union sockaddr_union *us, size_t uslen,
+ 	     xfd->para.socket.connect_timeout.tv_usec != 0) {
+ 	    struct timeval timeout;
+ 	    struct pollfd writefd;
++	    int err;
++	    socklen_t errlen = sizeof(err);
+ 	    int result;
+ 
+ 	    Info4("connect(%d, %s, "F_Zd"): %s",
+@@ -894,7 +896,21 @@ int _xioopen_connect(struct single *xfd, union sockaddr_union *us, size_t uslen,
+ #endif
+ 	       return STAT_RETRYLATER;
+ 	    }
+-	    /* otherwise OK */
++	    /* otherwise OK or network error */
++	    result = Getsockopt(xfd->fd, SOL_SOCKET, SO_ERROR, &err, &errlen);
++	    if (result != 0) {
++	       Msg2(level, "getsockopt(%d, SOL_SOCKET, SO_ERROR, ...): %s",
++		    xfd->fd, strerror(err));
++	       return STAT_RETRYLATER;
++	    }
++	    Debug2("getsockopt(%d, SOL_SOCKET, SO_ERROR, { %d }) -> 0",
++		   xfd->fd, err);
++	    if (err != 0) {
++	       Msg4(level, "connect(%d, %s, "F_Zd"): %s",
++		     xfd->fd, sockaddr_info(them, themlen, infobuff, sizeof(infobuff)),
++		     themlen, strerror(err));
++	       return STAT_RETRYLATER;
++	    }
+ 	    Fcntl_l(xfd->fd, F_SETFL, fcntl_flags);
+ 	 } else {
+ 	    Warn4("connect(%d, %s, "F_Zd"): %s",

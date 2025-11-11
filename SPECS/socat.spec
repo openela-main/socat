@@ -3,7 +3,7 @@
 Summary: Bidirectional data relay between two data channels ('netcat++')
 Name: socat
 Version: 1.7.4.1
-Release: 6%{?dist}.1
+Release: 8%{?dist}
 License: GPLv2
 Url:  http://www.dest-unreach.org/socat/
 Source: http://www.dest-unreach.org/socat/download/%{name}-%{version}.tar.gz
@@ -13,6 +13,9 @@ Patch1: socat-1.7.3.3-warn.patch
 # Based on: https://repo.or.cz/socat.git/commit/1477334905be18c08bd6dc77be5a62e36b573de4
 Patch2: socat-1.7.4.1-ipv6-peername-segfault.patch
 Patch3: socat-1.7.4.1-CVE-2024-54661.patch
+# https://issues.redhat.com/browse/RHEL-107884
+# Based on: https://repo.or.cz/socat.git/commit/ed4780553fd05bb8ed8a29462698090482be3393
+Patch4: socat-1.7.4.1-tcp-address-with-connect-timeout.patch
 
 BuildRequires: make
 BuildRequires:  gcc
@@ -77,9 +80,13 @@ export OD_C=/usr/bin/od
 %doc %{_mandir}/man1/*
 
 %changelog
-* Wed Jun 04 2025 Martin Osvald <mosvald@redhat.com> - 1.7.4.1-6.1
+* Thu Aug 07 2025 Martin Osvald <mosvald@redhat.com> - 1.7.4.1-8
+- Fix for: Client may exit 0 despite connection being reset
+  Resolves: RHEL-107884
+
+* Wed Jun 04 2025 Martin Osvald <mosvald@redhat.com> - 1.7.4.1-7
 - add fix for CVE-2024-54661
-  Resolves: RHEL-70096
+  Resolves: RHEL-94843
 - switch to autopatch, remove unused patches
 
 * Mon Apr 15 2024 Martin Osvald <mosvald@redhat.com> - 1.7.4.1-6
