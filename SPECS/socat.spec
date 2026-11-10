@@ -3,7 +3,7 @@
 Summary: Bidirectional data relay between two data channels ('netcat++')
 Name: socat
 Version: 1.7.4.1
-Release: 8%{?dist}
+Release: 10%{?dist}
 License: GPLv2
 Url:  http://www.dest-unreach.org/socat/
 Source: http://www.dest-unreach.org/socat/download/%{name}-%{version}.tar.gz
@@ -16,6 +16,9 @@ Patch3: socat-1.7.4.1-CVE-2024-54661.patch
 # https://issues.redhat.com/browse/RHEL-107884
 # Based on: https://repo.or.cz/socat.git/commit/ed4780553fd05bb8ed8a29462698090482be3393
 Patch4: socat-1.7.4.1-tcp-address-with-connect-timeout.patch
+# https://issues.redhat.com/browse/RHEL-143222
+# Based on: https://repo.or.cz/socat.git/commit/45d87df2fd32756b56f8a48c2d6cdb476342aa20
+Patch5: socat-1.7.4.1-handle-EINTR-on-recvmsg.patch
 
 BuildRequires: make
 BuildRequires:  gcc
@@ -80,6 +83,14 @@ export OD_C=/usr/bin/od
 %doc %{_mandir}/man1/*
 
 %changelog
+* Thu Oct 01 2026 Martin Osvald <mosvald@redhat.com> - 1.7.4.1-10
+- Version bump
+  Resolves: RHEL-274800
+
+* Fri Jan 30 2026 Martin Osvald <mosvald@redhat.com> - 1.7.4.1-9
+- Handle EINTR on recvmsg()
+  Resolves: RHEL-143222
+
 * Thu Aug 07 2025 Martin Osvald <mosvald@redhat.com> - 1.7.4.1-8
 - Fix for: Client may exit 0 despite connection being reset
   Resolves: RHEL-107884
