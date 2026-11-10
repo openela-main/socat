@@ -1,0 +1,145 @@
+Add openssl-groups option for post-quantum key exchange
+
+Enable configuration of TLS key exchange groups to support post-quantum
+cryptography hybrid KEMs like X25519MLKEM768. Replaces hardcoded P-256
+with modern SSL_CTX_set1_groups_list() API for OpenSSL 1.1.0+.
+
+Co-developed-by: Claude AI <noreply@anthropic.com>
+Signed-off-by: Martin Osvald <mosvald@redhat.com>
+
+diff --git a/doc/socat.1 b/doc/socat.1
+index e21fe97..b406044 100644
+--- a/doc/socat.1
++++ b/doc/socat.1
+@@ -3092,6 +3092,13 @@ to proof that it is the owner of a certificate needs the private key\&.
+ Specifies the file with the Diffie Hellman parameters\&. These parameters may
+ also be in the file given with the cert
+ option in which case the dhparams option is not needed\&.
++.IP "\fB\f(CWopenssl-groups=<groups\-list>\fP\fP"
++Specifies the list of key exchange groups (curves) for the
++connection\&. The <groups\-list> is a colon\-separated list of
++group names in preference order\&. Useful for enabling post\-quantum
++cryptography (PQC) in TLS 1\&.3, e\&.g\&.,
++\(dq\&X25519MLKEM768:X25519:prime256v1\(dq\&\&. Requires OpenSSL 1\&.1\&.0 or
++higher\&. If not specified, OpenSSL uses its built\-in defaults\&.
+ .IP "\fB\f(CWcafile=<filename>\fP\fP"
+ Specifies the file with the trusted (root) authority certificates\&. The file
+ must be in PEM format and should contain one or more certificates\&. The party
+diff --git a/doc/socat.yo b/doc/socat.yo
+index 49ab0dd..b441011 100644
+--- a/doc/socat.yo
++++ b/doc/socat.yo
+@@ -2832,6 +2832,12 @@ label(OPTION_OPENSSL_DHPARAMS)dit(bf(tt(dhparams=<filename>)))
+    Specifies the file with the Diffie Hellman parameters. These parameters may
+    also be in the file given with the link(cert)(OPTION_OPENSSL_CERTIFICATE)
+    option in which case the dhparams option is not needed.
++label(OPTION_OPENSSL_GROUPS)dit(bf(tt(openssl-groups=<groups-list>)))
++   Specifies the list of key exchange groups (curves) for the connection.
++   The bf(tt(<groups-list>)) is a colon-separated list of group names in
++   preference order, e.g. tt(X25519MLKEM768:X25519:prime256v1). Useful for
++   enabling post-quantum cryptography (PQC) in TLS 1.3. Requires OpenSSL 1.1.0
++   or higher. If not specified, OpenSSL uses its built-in defaults.
+ label(OPTION_OPENSSL_CAFILE)dit(bf(tt(cafile=<filename>)))
+    Specifies the file with the trusted (root) authority certificates. The file
+    must be in PEM format and should contain one or more certificates. The party
+diff --git a/xio-openssl.c b/xio-openssl.c
+index 7d088cf..700f2d1 100644
+--- a/xio-openssl.c
++++ b/xio-openssl.c
+@@ -124,6 +124,7 @@ const struct optdesc opt_openssl_key         = { "openssl-key",         "key",
+ const struct optdesc opt_openssl_dhparam     = { "openssl-dhparam",     "dh",    OPT_OPENSSL_DHPARAM,     GROUP_OPENSSL, PH_SPEC, TYPE_FILENAME, OFUNC_SPEC };
+ const struct optdesc opt_openssl_cafile      = { "openssl-cafile",     "cafile", OPT_OPENSSL_CAFILE,      GROUP_OPENSSL, PH_SPEC, TYPE_FILENAME, OFUNC_SPEC };
+ const struct optdesc opt_openssl_capath      = { "openssl-capath",     "capath", OPT_OPENSSL_CAPATH,      GROUP_OPENSSL, PH_SPEC, TYPE_FILENAME, OFUNC_SPEC };
++const struct optdesc opt_openssl_groups      = { "openssl-groups",     NULL,     OPT_OPENSSL_GROUPS,      GROUP_OPENSSL, PH_SPEC, TYPE_STRING,   OFUNC_SPEC };
+ const struct optdesc opt_openssl_egd         = { "openssl-egd",        "egd",    OPT_OPENSSL_EGD,         GROUP_OPENSSL, PH_SPEC, TYPE_FILENAME, OFUNC_SPEC };
+ const struct optdesc opt_openssl_pseudo      = { "openssl-pseudo",     "pseudo", OPT_OPENSSL_PSEUDO,      GROUP_OPENSSL, PH_SPEC, TYPE_BOOL,     OFUNC_SPEC };
+ #if OPENSSL_VERSION_NUMBER >= 0x00908000L && !defined(OPENSSL_NO_COMP)
+@@ -1263,20 +1264,30 @@ cont_out:
+       ;
+    }
+ 
+-#if HAVE_TYPE_EC_KEY	/* not on Openindiana 5.11 */
++   /* Configure supported groups/curves for key exchange */
++#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+    {
+-      /* see http://openssl.6102.n7.nabble.com/Problem-with-cipher-suite-ECDHE-ECDSA-AES256-SHA384-td42229.html */
+-      int	 nid;
+-      EC_KEY *ecdh;
++      char *opt_groups = NULL;
+ 
+-#if 0
+-      nid = OBJ_sn2nid(ECDHE_CURVE);
+-      if (nid == NID_undef) {
+-	 Error("openssl: failed to set ECDHE parameters");
+-	 return -1;
++      retropt_string(opts, OPT_OPENSSL_GROUPS, &opt_groups);
++
++      if (opt_groups != NULL) {
++         if (!SSL_CTX_set1_groups_list(ctx, opt_groups)) {
++            Warn2("SSL_CTX_set1_groups_list(ctx, \"%s\"): %s",
++                  opt_groups, ERR_error_string(ERR_get_error(), NULL));
++            Error1("Failed to set OpenSSL groups: %s", opt_groups);
++            return -1;
++         }
++         Info1("OpenSSL key exchange groups set to: %s", opt_groups);
++      } else {
++         Debug("OpenSSL groups not specified, using library defaults");
+       }
+-#endif
+-      nid = NID_X9_62_prime256v1;
++   }
++#elif HAVE_TYPE_EC_KEY
++   /* Legacy API for OpenSSL < 1.1.0: single curve only, no PQC support */
++   {
++      int nid = NID_X9_62_prime256v1;
++      EC_KEY *ecdh;
+       ecdh = EC_KEY_new_by_curve_name(nid);
+       if (NULL == ecdh) {
+ 	 Error("openssl: failed to set ECDHE parameters");
+@@ -1284,8 +1295,9 @@ cont_out:
+       }
+ 
+       SSL_CTX_set_tmp_ecdh(ctx, ecdh);
++      EC_KEY_free(ecdh);
+    }
+-#endif /* HAVE_TYPE_EC_KEY */
++#endif /* OPENSSL_VERSION_NUMBER >= 0x10100000L */
+ 
+ #if OPENSSL_VERSION_NUMBER >= 0x00908000L
+    if (opt_compress) {
+diff --git a/xio-openssl.h b/xio-openssl.h
+index 6ec3d3a..285f621 100644
+--- a/xio-openssl.h
++++ b/xio-openssl.h
+@@ -23,6 +23,7 @@ extern const struct optdesc opt_openssl_verify;
+ extern const struct optdesc opt_openssl_certificate;
+ extern const struct optdesc opt_openssl_key;
+ extern const struct optdesc opt_openssl_dhparam;
++extern const struct optdesc opt_openssl_groups;
+ extern const struct optdesc opt_openssl_cafile;
+ extern const struct optdesc opt_openssl_capath;
+ extern const struct optdesc opt_openssl_egd;
+diff --git a/xioopts.c b/xioopts.c
+index d0ecfae..d7be3eb 100644
+--- a/xioopts.c
++++ b/xioopts.c
+@@ -1173,6 +1173,7 @@ const struct optname optionnames[] = {
+ 	IF_OPENSSL("openssl-dhparam",	&opt_openssl_dhparam)
+ 	IF_OPENSSL("openssl-dhparams",	&opt_openssl_dhparam)
+ 	IF_OPENSSL("openssl-egd",	&opt_openssl_egd)
++	IF_OPENSSL("openssl-groups",	&opt_openssl_groups)
+ #if WITH_FIPS
+ 	IF_OPENSSL("openssl-fips",	&opt_openssl_fips)
+ #endif
+diff --git a/xioopts.h b/xioopts.h
+index 425960f..dee5342 100644
+--- a/xioopts.h
++++ b/xioopts.h
+@@ -485,6 +485,7 @@ enum e_optcode {
+    OPT_OPENSSL_CERTIFICATE,
+    OPT_OPENSSL_CIPHERLIST,
+    OPT_OPENSSL_COMMONNAME,
++   OPT_OPENSSL_GROUPS,
+ #if OPENSSL_VERSION_NUMBER >= 0x00908000L
+    OPT_OPENSSL_COMPRESS,
+ #endif

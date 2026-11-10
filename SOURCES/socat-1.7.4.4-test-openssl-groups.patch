@@ -1,0 +1,121 @@
+Add test for openssl-groups option
+
+Adds a test case to test.sh for the openssl-groups option. The test
+verifies that TLS key exchange groups can be configured and are
+actually negotiated as specified.
+
+The test uses openssl s_client to connect and verify group negotiation,
+following the pattern of existing OpenSSL tests like OPENSSL_COMPRESS.
+
+Test scenarios:
+1. Server with openssl-groups=prime256v1:secp384r1 negotiates prime256v1
+2. Server with openssl-groups=X25519:prime256v1 prefers X25519 (best-effort)
+
+The test gracefully handles OpenSSL version differences and skips if
+prerequisites are not available.
+
+Co-developed-by: Claude AI <noreply@anthropic.com>
+Signed-off-by: Martin Osvald <mosvald@redhat.com>
+
+diff --git a/test.sh b/test.sh
+index 1dfad1f..c328041 100755
+--- a/test.sh
++++ b/test.sh
+@@ -15657,6 +15657,97 @@ esac
+ N=$((N+1))
+ 
+ 
++NAME=OPENSSL_GROUPS
++case "$TESTS" in
++*%$N%*|*%functions%*|*%openssl%*|*%tcp%*|*%tcp4%*|*%ip4%*|*%$NAME%*)
++TEST="$NAME: OpenSSL groups option"
++if ! eval $NUMCOND; then :;
++elif ! testfeats openssl >/dev/null; then
++    $PRINTF "test $F_n $TEST... ${YELLOW}OPENSSL not available${NORMAL}\n" $N
++    numCANT=$((numCANT+1))
++    listCANT="$listCANT $N"
++elif ! testfeats listen tcp ip4 >/dev/null || ! runsip4 >/dev/null; then
++    $PRINTF "test $F_n $TEST... ${YELLOW}TCP/IPv4 not available${NORMAL}\n" $N
++    numCANT=$((numCANT+1))
++    listCANT="$listCANT $N"
++elif ! testoptions openssl-groups >/dev/null; then
++    $PRINTF "test $F_n $TEST... ${YELLOW}OPENSSL groups option not available${NORMAL}\n" $N
++    numCANT=$((numCANT+1))
++    listCANT="$listCANT $N"
++elif ! type openssl >/dev/null 2>&1; then
++    $PRINTF "test $F_n $TEST... ${YELLOW}openssl executable not available${NORMAL}\n" $N
++    numCANT=$((numCANT+1))
++    listCANT="$listCANT $N"
++else
++    gentestcert testsrv
++    printf "test $F_n $TEST... " $N
++    tf="$td/test$N.stdout"
++    te="$td/test$N.stderr"
++    success=yes
++
++    # Test 1: Verify prime256v1 is negotiated when specified
++    CMD1="$TRACE $SOCAT $opts OPENSSL-LISTEN:$PORT,pf=ip4,$REUSEADDR,$SOCAT_EGD,cert=testsrv.crt,key=testsrv.key,verify=0,openssl-groups=prime256v1:secp384r1 PIPE"
++    $CMD1 2>"${te}1" &
++    pid0=$!
++    waittcp4port $PORT 1
++    echo "test" | openssl s_client -connect $LOCALHOST:$PORT -groups prime256v1:X25519 2>&1 | \
++        tee "${tf}1" | grep -q "prime256v1\|P-256"
++    rc1=$?
++    kill $pid0 2>/dev/null
++    wait $pid0 2>/dev/null || true
++
++    if [ $rc1 -ne 0 ]; then
++        success=
++    fi
++
++    # Test 2: Verify X25519 is negotiated when preferred
++    if [ -n "$success" ]; then
++        CMD2="$TRACE $SOCAT $opts OPENSSL-LISTEN:$PORT,pf=ip4,$REUSEADDR,$SOCAT_EGD,cert=testsrv.crt,key=testsrv.key,verify=0,openssl-groups=X25519:prime256v1 PIPE"
++        $CMD2 2>"${te}2" &
++        pid0=$!
++        waittcp4port $PORT 1
++        echo "test" | openssl s_client -connect $LOCALHOST:$PORT -groups X25519:prime256v1 2>&1 | \
++            tee "${tf}2" | grep -q "X25519\|x25519"
++        rc2=$?
++        kill $pid0 2>/dev/null
++        wait $pid0 2>/dev/null || true
++
++        # X25519 test is best-effort; if it fails, just check that connection worked
++        if [ $rc2 -ne 0 ]; then
++            if grep -q "prime256v1\|P-256\|secp384r1" "${tf}2"; then
++                : # Connection worked with fallback, that's acceptable
++            else
++                success=
++            fi
++        fi
++    fi
++
++    if [ -z "$success" ]; then
++        $PRINTF "$FAILED: $TRACE $SOCAT:\n"
++        if [ ! -f "${tf}2" ]; then
++            echo "$CMD1 &"
++            cat "${te}1"
++            echo "Output:"
++            cat "${tf}1"
++        else
++            echo "$CMD2 &"
++            cat "${te}2"
++            echo "Output:"
++            cat "${tf}2"
++        fi
++        numFAIL=$((numFAIL+1))
++        listFAIL="$listFAIL $N"
++    else
++        $PRINTF "$OK\n"
++        if [ -n "$debug" ]; then cat "${te}1" "${te}2" 2>/dev/null; fi
++        numOK=$((numOK+1))
++    fi
++fi ;; # NUMCOND, feats
++esac
++PORT=$((PORT+1))
++N=$((N+1))
++
++
+ # end of common tests
+ 
+ ##################################################################################

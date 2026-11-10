@@ -3,7 +3,7 @@
 Summary: Bidirectional data relay between two data channels ('netcat++')
 Name: socat
 Version: 1.7.4.4
-Release: 8%{?dist}
+Release: 9%{?dist}
 License: GPL-2.0-only
 Url:  http://www.dest-unreach.org/socat/
 Source: http://www.dest-unreach.org/socat/download/%{name}-%{version}.tar.gz
@@ -11,6 +11,10 @@ Source: http://www.dest-unreach.org/socat/download/%{name}-%{version}.tar.gz
 Patch1: socat-1.7.3.3-warn.patch
 Patch2: socat-configure-c99.patch
 Patch3: socat-1.7.4.4-CVE-2024-54661.patch
+# Patch4 & Patch5:
+# https://redhat.atlassian.net/browse/RHEL-129232
+Patch4: socat-1.7.4.4-openssl-groups.patch
+Patch5: socat-1.7.4.4-test-openssl-groups.patch
 
 BuildRequires: make
 BuildRequires:  gcc
@@ -75,6 +79,11 @@ export OD_C=/usr/bin/od
 %doc %{_mandir}/man1/*
 
 %changelog
+* Mon Jun 01 2026 Martin Osvald <mosvald@redhat.com> - 1.7.4.4-9
+- Add openssl-groups option for post-quantum key exchange
+- Add test for openssl-groups option
+  Resolves: RHEL-129232
+
 * Tue Jan  7 2025 Joe Orton <jorton@redhat.com> - 1.7.4.4-8
 - add fix for CVE-2024-54661
   Resolves: RHEL-70097
